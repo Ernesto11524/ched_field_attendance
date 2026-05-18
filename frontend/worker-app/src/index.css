@@ -1,0 +1,195 @@
+/* ── COCOBOD Design Tokens ─────────────────────────────── */
+:root {
+  --brown-dark:    #3B1F0A;
+  --brown-mid:     #5C2E0E;
+  --brown:         #7B3F1A;
+  --brown-light:   #A0522D;
+  --brown-warm:    #C47A3A;
+  --brown-pale:    #E8C99A;
+  --cream:         #FDF6EC;
+  --cream-dark:    #F5E6CC;
+  --white:         #FFFFFF;
+  --accent:        #C47A3A;
+  --accent-dark:   #A0522D;
+  --accent-glow:   #C47A3A25;
+  --accent-dim:    #C47A3A60;
+  --success:       #2D7A3A;
+  --danger:        #C0392B;
+  --warning:       #B7770D;
+  --text-primary:  #FFFFFF;
+  --text-secondary:#D4B896;
+  --text-muted:    #9C7A5A;
+  --card-bg:       #5C2E0Ecc;
+  --card-border:   #7B3F1A;
+  --font-display:  'Syne', sans-serif;
+  --font-body:     'DM Sans', sans-serif;
+  --radius-sm:     8px;
+  --radius-md:     16px;
+  --radius-lg:     24px;
+  --shadow-card:   0 8px 32px #3B1F0A40;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; -webkit-tap-highlight-color: transparent; }
+
+/* ── Desktop wrapper — centres a phone frame on large screens ── */
+body {
+  height: 100%;
+  font-family: var(--font-body);
+  background: #1A0D04;
+  color: var(--text-primary);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* The phone shell visible on desktop */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, #C47A3A12, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 50% 100%, #7B3F1A20, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 430px;          /* phone width on desktop */
+  height: 100dvh;
+  max-height: 932px;         /* phone height on desktop */
+  background: var(--brown-dark);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px #7B3F1A60, 0 32px 80px #00000080;
+}
+
+/* On actual phones — fill the full screen */
+@media (max-width: 480px) {
+  body { align-items: stretch; }
+  #root { max-width: 100%; max-height: none; box-shadow: none; border-radius: 0; }
+}
+
+h1,h2,h3,h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--brown-light); border-radius: 4px; }
+
+.screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 18px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brown-warm), var(--brown-light));
+  color: var(--white);
+  box-shadow: 0 4px 20px var(--accent-dim);
+}
+.btn-primary:hover:not(:disabled) { box-shadow: 0 6px 28px #C47A3A60; transform: translateY(-1px); }
+.btn-secondary { background: transparent; color: var(--brown-pale); border: 1.5px solid var(--brown-warm); }
+.btn-ghost { background: var(--brown-mid); color: var(--text-primary); border: 1px solid var(--card-border); }
+
+.input-group { display: flex; flex-direction: column; gap: 8px; }
+.input-label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.input-field {
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--brown-mid);
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.input-field:focus { border-color: var(--brown-warm); }
+.input-field::placeholder { color: var(--text-muted); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+}
+.badge-success { background: #2D7A3A20; color: #6FCF97; border: 1px solid #2D7A3A40; }
+.badge-warning { background: #B7770D20; color: #F2C94C; border: 1px solid #B7770D40; }
+.badge-danger  { background: #C0392B20; color: #EB5757; border: 1px solid #C0392B40; }
+.badge-muted   { background: #9C7A5A20; color: var(--text-secondary); border: 1px solid #9C7A5A40; }
+
+@keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse-ring { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.animate-fadeUp { animation: fadeUp 0.5s ease forwards; }
+.animate-fadeIn { animation: fadeIn 0.4s ease forwards; }
+
+.bg-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 10%, #C47A3A18 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 80% 80%, #7B3F1A40 0%, transparent 60%);
+}
+
+.content { position: relative; z-index: 1; }
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
