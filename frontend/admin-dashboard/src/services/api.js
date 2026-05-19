@@ -1,4 +1,4 @@
-const BASE = '/api';
+const BASE = 'https://cocobod-backend-production.up.railway.app/api';
 
 async function req(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };

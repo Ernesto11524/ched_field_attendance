@@ -1,4 +1,4 @@
-const BASE_URL = '/api';
+const BASE_URL = 'https://cocobod-backend-production.up.railway.app/api';
 
 // ── Helper ────────────────────────────────────────────────
 async function request(method, path, body = null, token = null) {
