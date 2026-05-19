@@ -1,119 +1,102 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { useAuth } from '../context/AuthContext';
-import { checkinAPI } from '../services/api';
-
-const BASE_URL = 'https://cocobod-backend-production.up.railway.app/api';
+import { webauthnAPI, checkinAPI } from '../services/api';
 
 const STATUS_CONFIG = {
-  on_time:          { icon: '✅', label: 'On Time!',            color: '#6FCF97', bg: '#2A7A4020', border: '#2A7A4050' },
-  late:             { icon: '🕐', label: 'Checked In Late',     color: '#F2C94C', bg: '#B7770D15', border: '#B7770D50' },
-  outside_geofence: { icon: '📍', label: 'Wrong Location',      color: '#EB5757', bg: '#C0392B15', border: '#C0392B50' },
-  biometric_failed: { icon: '👆', label: 'Biometric Failed',    color: '#EB5757', bg: '#C0392B15', border: '#C0392B50' },
-  overridden:       { icon: '✅', label: 'Supervisor Approved', color: '#6FCF97', bg: '#2A7A4020', border: '#2A7A4050' },
+  on_time:          { icon: '✅', label: 'On Time',             color: 'var(--accent)',  bg: '#00D4AA15' },
+  late:             { icon: '🕐', label: 'Late Check-In',       color: 'var(--gold)',   bg: '#F5A62315' },
+  outside_geofence: { icon: '📍', label: 'Wrong Location',      color: 'var(--danger)', bg: '#FF5A5A15' },
+  biometric_failed: { icon: '👆', label: 'Biometric Failed',    color: 'var(--danger)', bg: '#FF5A5A15' },
+  overridden:       { icon: '✅', label: 'Supervisor Approved',  color: 'var(--accent)', bg: '#00D4AA15' },
 };
-
-const PHASE_CONFIG = {
-  gps:        { icon: '📡', label: 'Getting your location...', sub: 'Please allow GPS access when prompted' },
-  submitting: { icon: '⏳', label: 'Recording check-in...',    sub: 'Almost done, please wait'              },
-};
-
-function LiveClock() {
-  const [time, setTime] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const hh   = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const ss   = time.toLocaleTimeString('en-GB', { second: '2-digit' }).slice(-2);
-  const date = time.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  return (
-    <div style={{ textAlign: 'center', marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
-        <span className="clock-display">{hh}</span>
-        <span style={{ fontFamily: 'var(--font-d)', fontSize: 28, fontWeight: 700,
-          color: 'var(--b5)', lineHeight: 1, marginBottom: 4,
-          animation: 'tickerBounce 1s ease infinite' }}>:{ss}</span>
-      </div>
-      <p style={{ color: 'var(--b6)', fontSize: 14, marginTop: 6, letterSpacing: '0.02em' }}>{date}</p>
-    </div>
-  );
-}
 
 export default function CheckInPage() {
   const { worker, token, logout } = useAuth();
   const navigate = useNavigate();
-  const btnRef   = useRef(null);
 
-  const [phase, setPhase]     = useState('idle');
-  const [site, setSite]       = useState(null);
-  const [result, setResult]   = useState(null);
-  const [error, setError]     = useState('');
-  const [ripples, setRipples] = useState([]);
-  const [hasDevice, setHasDevice] = useState(false);
+  const [phase, setPhase]       = useState('idle');
+  const [location, setLocation] = useState(null);
+  const [site, setSite]         = useState(null);
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState('');
+  const [currentTime, setTime]  = useState(new Date());
 
-  // Load worker's assigned site and check if device is registered
+  // Live clock
   useEffect(() => {
-    async function loadData() {
-      try {
-        // Load assigned site
-        const siteRes  = await fetch(`${BASE_URL}/workers/${worker.id}/assigned-site`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const siteData = await siteRes.json();
-        setSite(siteRes.ok && siteData.site ? siteData.site : null);
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
-        // Check if device is registered
-        const credRes  = await fetch(`${BASE_URL}/workers/${worker.id}/has-device`, {
+  // Load ONLY this worker's assigned site
+  useEffect(() => {
+    async function loadAssignedSite() {
+      try {
+        const res = await fetch(`https://cocobod-backend-production.up.railway.app/api/workers/${worker.id}/assigned-site`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const credData = await credRes.json();
-        setHasDevice(credRes.ok && credData.registered);
+        const data = await res.json();
+        if (res.ok && data.site) {
+          setSite(data.site);
+        } else {
+          setSite(null); // worker has no assignment
+        }
       } catch (_) {
         setSite(null);
-        setHasDevice(false);
       }
     }
-    if (worker?.id && token && token !== 'pending') loadData();
+    if (worker?.id && token && token !== 'pending') loadAssignedSite();
   }, [worker?.id, token]);
 
-  function addRipple(e) {
-    const rect = btnRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x  = e.clientX - rect.left;
-    const y  = e.clientY - rect.top;
-    const id = Date.now();
-    setRipples(r => [...r, { x, y, id }]);
-    setTimeout(() => setRipples(r => r.filter(rp => rp.id !== id)), 600);
-  }
-
-  async function handleCheckIn(e) {
-    addRipple(e);
-    setError(''); setResult(null);
+  async function handleCheckIn() {
+    setError('');
+    setResult(null);
 
     if (!site) {
-      setError('You have not been assigned to a work site yet. Contact your supervisor.');
-      setPhase('error'); return;
+      setError('You have not been assigned to a work site yet. Please contact your supervisor.');
+      setPhase('error');
+      return;
     }
 
-    if (!hasDevice) {
-      navigate('/register-device'); return;
-    }
-
-    // GPS
+    // ── Step 1: Get GPS ──────────────────────────────────
     setPhase('gps');
     let coords;
     try {
-      coords = await new Promise((resolve, reject) =>
+      coords = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
-          p => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
-          () => reject(new Error('Could not get your location. Please enable GPS.')),
+          pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+          () => reject(new Error('Could not get your location. Please enable GPS and try again.')),
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        )
-      );
-    } catch (err) { setError(err.message); setPhase('error'); return; }
+        );
+      });
+      setLocation(coords);
+    } catch (err) {
+      setError(err.message);
+      setPhase('error');
+      return;
+    }
 
-    // Submit — no biometric on every check-in
+    // ── Step 2: Biometric auth ───────────────────────────
+    setPhase('biometric');
+    let biometricVerified = false;
+    let credentialId = null;
+
+    try {
+      const authOptions  = await webauthnAPI.getAuthenticationOptions(worker.id);
+      const authResponse = await startAuthentication(authOptions);
+      const verifyResult = await webauthnAPI.verifyAuthentication(worker.id, authResponse);
+      biometricVerified  = verifyResult.verified;
+      credentialId       = verifyResult.credential_id;
+    } catch (err) {
+      if (err.message?.includes('No registered device')) {
+        navigate('/register-device');
+        return;
+      }
+      biometricVerified = false;
+    }
+
+    // ── Step 3: Submit check-in ──────────────────────────
     setPhase('submitting');
     try {
       const data = await checkinAPI.submit({
@@ -121,153 +104,130 @@ export default function CheckInPage() {
         site_id:            site.id,
         latitude:           coords.latitude,
         longitude:          coords.longitude,
-        biometric_verified: true,  // already verified at registration
-        credential_id:      null,
+        biometric_verified: biometricVerified,
+        credential_id:      credentialId,
       }, token);
-      setResult(data.checkin); setPhase('result');
-    } catch (err) { setError(err.message); setPhase('error'); }
+
+      setResult(data.checkin);
+      setPhase('result');
+    } catch (err) {
+      setError(err.message);
+      setPhase('error');
+    }
   }
 
-  const inProgress = ['gps', 'submitting'].includes(phase);
+  function reset() {
+    setPhase('idle');
+    setError('');
+    setResult(null);
+  }
+
+  const timeStr = currentTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = currentTime.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="screen" style={{ background: 'var(--b0)' }}>
-      <div className="noise" />
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
-      <div className="content" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '44px 24px 32px' }}>
+    <div className="screen">
+      <div className="bg-mesh" />
+      <div className="content" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '48px 24px 32px' }}>
 
         {/* Top bar */}
-        <div className="animate-slideDown" style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36,
-        }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
           <div>
-            <p style={{ fontFamily: 'var(--font-d)', fontSize: 10, fontWeight: 800,
-              letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--b5)', marginBottom: 3 }}>
-              COCOBOD Field Attendance
+            <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 2 }}>
+              COCOBOD Attendance
             </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%', background: '#6FCF97',
-                boxShadow: '0 0 8px #6FCF97',
-                animation: 'pulseRing 2s ease-out infinite',
-              }} />
-              <p style={{ color: 'var(--b7)', fontSize: 14, fontWeight: 500 }}>{worker?.full_name}</p>
-            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{worker?.full_name}</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[
-              { icon: '📋', action: () => navigate('/history'), title: 'History' },
-              { icon: '↩',  action: logout,                     title: 'Logout'  },
-            ].map(({ icon, action, title }) => (
-              <button key={title} onClick={action} title={title} style={{
-                width: 40, height: 40, borderRadius: '12px',
-                background: 'var(--b2)', border: '1px solid var(--b3)',
-                color: 'var(--b7)', cursor: 'pointer', fontSize: 17,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.2s', flexShrink: 0,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--b3)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--b2)'}>
-                {icon}
-              </button>
-            ))}
+            <button onClick={() => navigate('/history')}
+              style={{ width: 40, height: 40, borderRadius: '12px', background: 'var(--navy-light)',
+                border: '1px solid var(--card-border)', color: 'var(--text-primary)',
+                cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📋
+            </button>
+            <button onClick={logout}
+              style={{ width: 40, height: 40, borderRadius: '12px', background: 'var(--navy-light)',
+                border: '1px solid var(--card-border)', color: 'var(--text-secondary)',
+                cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ↩
+            </button>
           </div>
         </div>
 
-        {/* Live clock */}
-        <div className="animate-fadeUp" style={{ animationDelay: '0.1s', opacity: 0 }}>
-          <LiveClock />
+        {/* Time display */}
+        <div className="animate-fadeUp" style={{ marginBottom: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 64, fontFamily: 'var(--font-display)', fontWeight: 800,
+            letterSpacing: '-0.03em', lineHeight: 1, marginBottom: 8 }}>
+            {timeStr}
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>{dateStr}</p>
         </div>
 
-        {/* Device not registered warning */}
-        {!hasDevice && (
-          <div className="card animate-fadeUp" style={{
-            animationDelay: '0.15s', opacity: 0, marginBottom: 16,
-            background: '#B7770D10', borderColor: '#B7770D40', padding: '14px 18px',
-          }}>
+        {/* Site card — only show if assigned */}
+        {site ? (
+          <div className="card animate-fadeUp" style={{ animationDelay: '0.1s', opacity: 0, marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 22 }}>📱</span>
+              <div style={{ width: 40, height: 40, borderRadius: '12px',
+                background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                📍
+              </div>
               <div>
-                <p style={{ fontFamily: 'var(--font-d)', fontWeight: 700,
-                  fontSize: 13, color: '#F2C94C', marginBottom: 2 }}>Device Not Registered</p>
-                <p style={{ color: 'var(--b6)', fontSize: 12 }}>
-                  Tap Check In to register this device first.
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
+                  {site.name}
+                </p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{site.address}</p>
+              </div>
+            </div>
+            {site.checkin_windows && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--card-border)',
+                display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {site.checkin_windows.map(w => (
+                  <span key={w.id} className="badge badge-muted" style={{ fontSize: 11 }}>
+                    {w.label}: {w.window_open?.slice(0,5)}–{w.window_close?.slice(0,5)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="card animate-fadeUp" style={{ animationDelay: '0.1s', opacity: 0,
+            marginBottom: 24, background: '#F5A62310', borderColor: '#F5A62340' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 24 }}>⚠️</span>
+              <div>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700,
+                  fontSize: 14, color: 'var(--gold)', marginBottom: 2 }}>
+                  No Site Assigned
+                </p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                  Contact your supervisor to be assigned to a work site.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Site card */}
-        <div className="animate-fadeUp" style={{ animationDelay: '0.2s', opacity: 0, marginBottom: 20 }}>
-          {site ? (
-            <div className="card" style={{ padding: '16px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: '14px', flexShrink: 0,
-                  background: 'linear-gradient(135deg, var(--b4), var(--b3))',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                  boxShadow: '0 4px 12px #6B2F0D50',
-                }}>📍</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 14,
-                    marginBottom: 2, color: 'var(--b8)' }}>{site.name}</p>
-                  <p style={{ color: 'var(--b5)', fontSize: 12, whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis' }}>{site.address}</p>
-                </div>
-                <span className="badge badge-success" style={{ fontSize: 10, flexShrink: 0 }}>Active</span>
-              </div>
-
-              {site.checkin_windows?.length > 0 && (
-                <>
-                  <div className="divider" />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {site.checkin_windows.map(w => (
-                      <span key={w.id} className="badge badge-muted" style={{ fontSize: 10 }}>
-                        {w.label}: {w.window_open?.slice(0,5)}–{w.window_close?.slice(0,5)}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
+        {/* Phase indicator */}
+        {phase !== 'idle' && phase !== 'result' && phase !== 'error' && (
+          <div className="card animate-fadeIn" style={{ marginBottom: 24, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16 }}>
+              {phase === 'gps'        && <span style={{ fontSize: 36 }}>📡</span>}
+              {phase === 'biometric'  && <span style={{ fontSize: 36 }}>👆</span>}
+              {phase === 'submitting' && <span style={{ fontSize: 36 }}>⏳</span>}
             </div>
-          ) : (
-            <div className="card" style={{ padding: '16px 20px',
-              background: 'linear-gradient(135deg, #B7770D15, #6B2F0D10)',
-              borderColor: '#B7770D40' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>⚠️</span>
-                <div>
-                  <p style={{ fontFamily: 'var(--font-d)', fontWeight: 700,
-                    fontSize: 14, color: '#F2C94C', marginBottom: 2 }}>No Site Assigned</p>
-                  <p style={{ color: 'var(--b6)', fontSize: 12 }}>
-                    Contact your supervisor to be assigned to a work site.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Phase card */}
-        {inProgress && (
-          <div className="card phase-card animate-scaleIn" style={{
-            marginBottom: 20, textAlign: 'center', padding: '28px 20px',
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 16,
-              animation: 'floatY 2s ease-in-out infinite' }}>
-              {PHASE_CONFIG[phase].icon}
-            </div>
-            <div className="spinner" style={{ color: 'var(--b6)', margin: '0 auto 14px',
-              width: 28, height: 28, borderWidth: 3 }} />
-            <p style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 17,
-              color: 'var(--b8)', marginBottom: 6 }}>
-              {PHASE_CONFIG[phase].label}
+            <div className="spinner" style={{ color: 'var(--accent)', margin: '0 auto 12px' }} />
+            <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16 }}>
+              {phase === 'gps'        && 'Getting your location...'}
+              {phase === 'biometric'  && 'Waiting for biometric...'}
+              {phase === 'submitting' && 'Recording your check-in...'}
             </p>
-            <p style={{ color: 'var(--b5)', fontSize: 13 }}>{PHASE_CONFIG[phase].sub}</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>
+              {phase === 'gps'       && 'Please allow location access when prompted'}
+              {phase === 'biometric' && 'Use your fingerprint or face ID'}
+              {phase === 'submitting' && 'Almost done...'}
+            </p>
           </div>
         )}
 
@@ -275,24 +235,24 @@ export default function CheckInPage() {
         {phase === 'result' && result && (() => {
           const cfg = STATUS_CONFIG[result.status] || STATUS_CONFIG.on_time;
           return (
-            <div className="card animate-scaleIn" style={{
-              marginBottom: 20, textAlign: 'center', padding: '28px 20px',
-              background: cfg.bg, borderColor: cfg.border,
-            }}>
-              <div style={{ fontSize: 52, marginBottom: 12,
-                animation: 'floatY 3s ease-in-out infinite' }}>{cfg.icon}</div>
-              <h3 style={{ fontFamily: 'var(--font-d)', fontSize: 24, fontWeight: 800,
+            <div className="card animate-fadeIn" style={{ marginBottom: 24, textAlign: 'center',
+              background: cfg.bg, borderColor: cfg.color + '40' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>{cfg.icon}</div>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
                 color: cfg.color, marginBottom: 8 }}>{cfg.label}</h3>
-              <p style={{ color: 'var(--b6)', fontSize: 13, marginBottom: 16 }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16 }}>
                 {result.window ? `Window: ${result.window}` : 'Outside check-in window'}
               </p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <span className={`badge ${result.location_verified ? 'badge-success' : 'badge-danger'}`}>
                   📍 {result.location_verified ? 'Location OK' : 'Wrong Location'}
                 </span>
+                <span className={`badge ${result.biometric_verified ? 'badge-success' : 'badge-danger'}`}>
+                  👆 {result.biometric_verified ? 'Biometric OK' : 'Biometric Failed'}
+                </span>
               </div>
               {result.distance_from_site_m != null && (
-                <p style={{ color: 'var(--b4)', fontSize: 11, marginTop: 8 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 12 }}>
                   {result.distance_from_site_m}m from site
                 </p>
               )}
@@ -302,72 +262,41 @@ export default function CheckInPage() {
 
         {/* Error card */}
         {phase === 'error' && (
-          <div className="card animate-scaleIn" style={{
-            marginBottom: 20, textAlign: 'center', padding: '24px 20px',
-            background: '#C0392B10', borderColor: '#C0392B40',
-          }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>⚠️</div>
-            <p style={{ color: '#EB5757', fontFamily: 'var(--font-d)', fontWeight: 700,
-              fontSize: 16, marginBottom: 6 }}>Check-In Failed</p>
-            <p style={{ color: 'var(--b6)', fontSize: 13 }}>{error}</p>
+          <div className="card animate-fadeIn" style={{ marginBottom: 24, textAlign: 'center',
+            background: '#FF5A5A10', borderColor: '#FF5A5A40' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+            <p style={{ color: 'var(--danger)', fontFamily: 'var(--font-display)',
+              fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Check-In Failed</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{error}</p>
           </div>
         )}
 
-        {/* Action area */}
+        {/* Action buttons */}
         <div style={{ marginTop: 'auto' }}>
           {phase === 'idle' && (
-            <div className="animate-fadeUp" style={{ animationDelay: '0.3s', opacity: 0 }}>
-              <div className="checkin-btn-wrap" ref={btnRef}>
-                {site && <><div className="ring" /><div className="ring ring-2" /></>}
-                <button
-                  className="btn btn-primary checkin-hero"
-                  onClick={handleCheckIn}
-                  disabled={!site}
-                  style={{ position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-                  {ripples.map(r => (
-                    <span key={r.id} style={{
-                      position: 'absolute', left: r.x, top: r.y,
-                      width: 0, height: 0, borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.3)',
-                      transform: 'translate(-50%,-50%)',
-                      animation: 'rippleOut 0.6s ease-out forwards',
-                    }} />
-                  ))}
-                  <span style={{ fontSize: 22 }}>📍</span>
-                  Tap to Check In
-                </button>
-              </div>
-            </div>
+            <button className="btn btn-primary animate-fadeUp"
+              style={{ animationDelay: '0.2s', opacity: 0, fontSize: 18, padding: '22px 24px' }}
+              onClick={handleCheckIn}
+              disabled={!site}>
+              <span style={{ fontSize: 22 }}>👆</span>
+              Check In Now
+            </button>
           )}
-
           {(phase === 'result' || phase === 'error') && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-              className="animate-fadeUp">
-              <button className="btn btn-ghost"
-                onClick={() => { setPhase('idle'); setError(''); setResult(null); }}>
-                Check In Again
-              </button>
-              <button className="btn btn-secondary" onClick={() => navigate('/history')}>
-                View My History
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button className="btn btn-ghost" onClick={reset}>Check In Again</button>
+              <button className="btn btn-secondary" onClick={() => navigate('/history')}>View History</button>
             </div>
           )}
         </div>
 
-        <button onClick={() => navigate('/register-device')} style={{
-          background: 'none', border: 'none', color: 'var(--b4)',
-          cursor: 'pointer', fontSize: 12, marginTop: 20, textAlign: 'center',
-          fontFamily: 'var(--font-b)', textDecoration: 'underline',
-        }}>
-          Register this device
+        <button onClick={() => navigate('/register-device')}
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
+            cursor: 'pointer', fontSize: 13, marginTop: 20, textAlign: 'center',
+            fontFamily: 'var(--font-body)', textDecoration: 'underline' }}>
+          Set up biometrics on this device
         </button>
       </div>
-
-      <style>{`
-        @keyframes rippleOut {
-          to { width: 200px; height: 200px; opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 }
