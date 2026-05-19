@@ -9,6 +9,7 @@ const {
   updateWorker,
   deactivateWorker,
   assignWorkerToSite,
+  hasRegisteredDevice,
 } = require('../controllers/worker.controller');
 const { authenticate, requireAdmin } = require('../middleware/auth.middleware');
 
@@ -23,6 +24,8 @@ router.get('/', getAllWorkers);
 
 // GET  /api/workers/:id/assigned-site  - get this worker's assigned site (used by worker app)
 router.get('/:id/assigned-site', getAssignedSite);
+
+router.get('/:id/has-device', hasRegisteredDevice);
 
 // GET  /api/workers/:id                - get one worker
 router.get('/:id', getWorkerById);

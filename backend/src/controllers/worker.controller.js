@@ -255,6 +255,21 @@ async function getAssignedSite(req, res, next) {
   }
 }
 
+async function hasRegisteredDevice(req, res, next) {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `SELECT COUNT(*) as count FROM worker_credentials 
+       WHERE worker_id = $1 AND is_active = true`,
+      [id]
+    );
+    const registered = parseInt(result.rows[0].count) > 0;
+    res.json({ registered });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getAllWorkers,
   getWorkerById,
