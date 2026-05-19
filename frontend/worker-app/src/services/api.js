@@ -1,4 +1,4 @@
-const BASE_URL = 'https://cocobod-backend-production.up.railway.app/api';
+const BASE_URL = '/api';
 
 
 // ── Helper ────────────────────────────────────────────────
