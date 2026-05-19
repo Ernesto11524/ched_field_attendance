@@ -7,27 +7,16 @@ const {
 
 const db = require('../config/db');
 
-// Your app's domain — update this when you deploy
-const RP_ID = process.env.RP_ID || 'localhost';
-const RP_NAME = 'Field Attendance App';
-const ORIGIN = process.env.ORIGIN || 'http://localhost:5173';
+const RP_ID   = process.env.RP_ID   || 'localhost';
+const RP_NAME = 'COCOBOD Field Attendance';
+const ORIGIN  = process.env.ORIGIN  || 'http://localhost:5173';
 
-// Temporary in-memory store for challenges (use Redis in production)
-const challengeStore = new Map();
+// ── REGISTRATION ─────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
-// REGISTRATION (first time a worker enrolls their device)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * GET /api/webauthn/register/options/:workerId
- * Step 1: Generate registration options to send to the worker's phone.
- */
 async function getRegistrationOptions(req, res, next) {
   try {
     const { workerId } = req.params;
 
-    // Get the worker
     const workerResult = await db.query(
       'SELECT id, full_name, employee_id FROM workers WHERE id = $1 AND is_active = true',
       [workerId]
@@ -39,18 +28,15 @@ async function getRegistrationOptions(req, res, next) {
 
     const worker = workerResult.rows[0];
 
-    // Get any existing credentials for this worker
     const credResult = await db.query(
       'SELECT credential_id FROM worker_credentials WHERE worker_id = $1 AND is_active = true',
       [workerId]
     );
 
-    const existingCredentials = credResult.rows.map((row) => ({
-      id: row.credential_id,
-      type: 'public-key',
+    const existingCredentials = credResult.rows.map(row => ({
+      id: row.credential_id, type: 'public-key',
     }));
 
-    // Generate the options
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: RP_ID,
@@ -59,16 +45,19 @@ async function getRegistrationOptions(req, res, next) {
       userDisplayName: worker.full_name,
       excludeCredentials: existingCredentials,
       authenticatorSelection: {
-        userVerification: 'required',       // requires biometric (fingerprint/face)
+        userVerification: 'required',
         residentKey: 'preferred',
       },
     });
 
-    // Save the challenge temporarily (10 minutes)
-    challengeStore.set(workerId, {
-      challenge: options.challenge,
-      expires: Date.now() + 10 * 60 * 1000,
-    });
+    // Save challenge to database instead of memory
+    await db.query(
+      `INSERT INTO webauthn_challenges (worker_id, challenge, type, expires_at)
+       VALUES ($1, $2, 'registration', NOW() + INTERVAL '10 minutes')
+       ON CONFLICT (worker_id, type) DO UPDATE
+         SET challenge = EXCLUDED.challenge, expires_at = EXCLUDED.expires_at`,
+      [workerId, options.challenge]
+    );
 
     res.json(options);
   } catch (err) {
@@ -76,26 +65,27 @@ async function getRegistrationOptions(req, res, next) {
   }
 }
 
-/**
- * POST /api/webauthn/register/verify/:workerId
- * Step 2: Verify the registration response from the worker's phone.
- * Body: the raw response from the browser's navigator.credentials.create()
- */
 async function verifyRegistration(req, res, next) {
   try {
     const { workerId } = req.params;
     const { body: registrationResponse, deviceName } = req.body;
 
-    // Get the stored challenge
-    const stored = challengeStore.get(workerId);
-    if (!stored || Date.now() > stored.expires) {
+    // Get challenge from database
+    const challengeResult = await db.query(
+      `SELECT challenge FROM webauthn_challenges
+       WHERE worker_id = $1 AND type = 'registration' AND expires_at > NOW()`,
+      [workerId]
+    );
+
+    if (challengeResult.rows.length === 0) {
       return res.status(400).json({ error: 'Registration challenge expired. Please try again.' });
     }
 
-    // Verify the response
+    const storedChallenge = challengeResult.rows[0].challenge;
+
     const verification = await verifyRegistrationResponse({
       response: registrationResponse,
-      expectedChallenge: stored.challenge,
+      expectedChallenge: storedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
     });
@@ -106,7 +96,6 @@ async function verifyRegistration(req, res, next) {
 
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
-    // Save the credential to the database
     await db.query(
       `INSERT INTO worker_credentials
          (worker_id, credential_id, public_key, sign_count, device_name)
@@ -122,8 +111,11 @@ async function verifyRegistration(req, res, next) {
       ]
     );
 
-    // Clean up the challenge
-    challengeStore.delete(workerId);
+    // Clean up challenge
+    await db.query(
+      `DELETE FROM webauthn_challenges WHERE worker_id = $1 AND type = 'registration'`,
+      [workerId]
+    );
 
     res.json({ message: 'Device registered successfully. Biometrics are now set up.' });
   } catch (err) {
@@ -131,19 +123,12 @@ async function verifyRegistration(req, res, next) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// AUTHENTICATION (every time a worker checks in)
-// ─────────────────────────────────────────────────────────────
+// ── AUTHENTICATION ────────────────────────────────────────
 
-/**
- * GET /api/webauthn/authenticate/options/:workerId
- * Step 1: Generate authentication options for the worker's phone.
- */
 async function getAuthenticationOptions(req, res, next) {
   try {
     const { workerId } = req.params;
 
-    // Get the worker's registered credentials
     const credResult = await db.query(
       'SELECT credential_id FROM worker_credentials WHERE worker_id = $1 AND is_active = true',
       [workerId]
@@ -155,9 +140,8 @@ async function getAuthenticationOptions(req, res, next) {
       });
     }
 
-    const allowCredentials = credResult.rows.map((row) => ({
-      id: row.credential_id,
-      type: 'public-key',
+    const allowCredentials = credResult.rows.map(row => ({
+      id: row.credential_id, type: 'public-key',
     }));
 
     const options = await generateAuthenticationOptions({
@@ -166,11 +150,14 @@ async function getAuthenticationOptions(req, res, next) {
       userVerification: 'required',
     });
 
-    // Save the challenge
-    challengeStore.set(workerId, {
-      challenge: options.challenge,
-      expires: Date.now() + 5 * 60 * 1000, // 5 minutes
-    });
+    // Save challenge to database
+    await db.query(
+      `INSERT INTO webauthn_challenges (worker_id, challenge, type, expires_at)
+       VALUES ($1, $2, 'authentication', NOW() + INTERVAL '5 minutes')
+       ON CONFLICT (worker_id, type) DO UPDATE
+         SET challenge = EXCLUDED.challenge, expires_at = EXCLUDED.expires_at`,
+      [workerId, options.challenge]
+    );
 
     res.json(options);
   } catch (err) {
@@ -178,23 +165,24 @@ async function getAuthenticationOptions(req, res, next) {
   }
 }
 
-/**
- * POST /api/webauthn/authenticate/verify/:workerId
- * Step 2: Verify the authentication response from the worker's phone.
- * Returns { verified: true/false } which is then used in the check-in request.
- */
 async function verifyAuthentication(req, res, next) {
   try {
     const { workerId } = req.params;
     const authResponse = req.body;
 
-    // Get the stored challenge
-    const stored = challengeStore.get(workerId);
-    if (!stored || Date.now() > stored.expires) {
+    // Get challenge from database
+    const challengeResult = await db.query(
+      `SELECT challenge FROM webauthn_challenges
+       WHERE worker_id = $1 AND type = 'authentication' AND expires_at > NOW()`,
+      [workerId]
+    );
+
+    if (challengeResult.rows.length === 0) {
       return res.status(400).json({ error: 'Authentication challenge expired. Please try again.' });
     }
 
-    // Find the matching credential in the database
+    const storedChallenge = challengeResult.rows[0].challenge;
+
     const credResult = await db.query(
       `SELECT * FROM worker_credentials
        WHERE worker_id = $1 AND credential_id = $2 AND is_active = true`,
@@ -207,10 +195,9 @@ async function verifyAuthentication(req, res, next) {
 
     const cred = credResult.rows[0];
 
-    // Verify the response
     const verification = await verifyAuthenticationResponse({
       response: authResponse,
-      expectedChallenge: stored.challenge,
+      expectedChallenge: storedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
       authenticator: {
@@ -224,14 +211,16 @@ async function verifyAuthentication(req, res, next) {
       return res.status(401).json({ verified: false, error: 'Biometric verification failed.' });
     }
 
-    // Update the sign count (security measure against cloning)
     await db.query(
       'UPDATE worker_credentials SET sign_count = $1 WHERE id = $2',
       [verification.authenticationInfo.newCounter, cred.id]
     );
 
-    // Clean up the challenge
-    challengeStore.delete(workerId);
+    // Clean up challenge
+    await db.query(
+      `DELETE FROM webauthn_challenges WHERE worker_id = $1 AND type = 'authentication'`,
+      [workerId]
+    );
 
     res.json({
       verified: true,
