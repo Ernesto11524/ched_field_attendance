@@ -33,7 +33,7 @@ export default function CheckInPage() {
   useEffect(() => {
     async function loadAssignedSite() {
       try {
-        const res = await fetch(`/api/workers/${worker.id}/assigned-site`, {
+        const res = await fetch(`https://cocobod-backend-production.up.railway.app/api/workers/${worker.id}/assigned-site`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
