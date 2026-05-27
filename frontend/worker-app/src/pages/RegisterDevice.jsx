@@ -4,153 +4,76 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { useAuth } from '../context/AuthContext';
 import { webauthnAPI } from '../services/api';
 
-const STEPS = [
-  { icon: '🔐', title: 'Secure Setup', desc: 'Your biometrics never leave your phone. We only store a secure key.' },
-  { icon: '👆', title: 'One-Time Only', desc: 'You only register your device once. After this, just use your fingerprint or face.' },
-  { icon: '✅', title: 'Always Verified', desc: 'Every check-in will confirm it\'s really you at the right location.' },
-];
-
 export default function RegisterDevice() {
-  const [step, setStep]         = useState('intro');   // intro | registering | success | error
-  const [error, setError]       = useState('');
-  const [deviceName, setDevice] = useState('My Phone');
+  const [step, setStep]       = useState('intro');
+  const [error, setError]     = useState('');
+  const [device, setDevice]   = useState('My Phone');
   const { worker } = useAuth();
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
 
   async function handleRegister() {
-    setStep('registering');
-    setError('');
-
+    setStep('loading'); setError('');
     try {
-      // Step 1: Get options from server
-      const options = await webauthnAPI.getRegistrationOptions(worker.id);
-
-      // Step 2: Trigger the browser's biometric prompt
-      const registrationResponse = await startRegistration(options);
-
-      // Step 3: Send result to server for verification
-      await webauthnAPI.verifyRegistration(worker.id, registrationResponse, deviceName);
-
+      const options  = await webauthnAPI.getRegistrationOptions(worker.id);
+      const response = await startRegistration(options);
+      await webauthnAPI.verifyRegistration(worker.id, response, device);
       setStep('success');
-    } catch (err) {
+    } catch(err) {
       setError(err.message || 'Registration failed. Please try again.');
       setStep('error');
     }
   }
 
-  if (step === 'success') {
-    return (
-      <div className="screen">
-        <div className="bg-mesh" />
-        <div className="content" style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          padding: '40px 24px', textAlign: 'center', gap: 24,
-        }}>
-          <div style={{
-            width: 96, height: 96, borderRadius: '50%',
-            background: 'var(--accent-glow)',
-            border: '2px solid var(--accent)',
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'center', fontSize: 44,
-            position: 'relative',
-          }}>
-            ✅
-            <div style={{
-              position: 'absolute', inset: -8, borderRadius: '50%',
-              border: '2px solid var(--accent)',
-              animation: 'pulse-ring 1.5s ease-out infinite',
-            }} />
-          </div>
-
-          <div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 10 }}>Device Registered!</h2>
-            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              Your biometrics are set up. You can now check in using your fingerprint or face.
-            </p>
-          </div>
-
-          <button className="btn btn-primary" style={{ maxWidth: 320 }} onClick={() => navigate('/checkin')}>
-            Go to Check-In →
-          </button>
-        </div>
+  if (step === 'success') return (
+    <div className="screen" style={{ background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+      <div style={{ padding: '0 28px' }}>
+        <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(34,197,94,0.12)', border: '2px solid #22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 24px', animation: 'pulseGlow 1.5s ease infinite' }}>✅</div>
+        <h2 style={{ fontFamily: 'var(--font-h)', fontSize: 24, fontWeight: 800, marginBottom: 10 }}>Device Registered!</h2>
+        <p style={{ color: 'var(--text3)', fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>Your device is set up. You can now check in without biometrics each time.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/checkin')}>Go to Check-In →</button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="screen">
-      <div className="bg-mesh" />
+    <div className="screen" style={{ background: 'var(--bg)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '44px 24px 32px' }}>
 
-      <div className="content" style={{
-        flex: 1, display: 'flex', flexDirection: 'column', padding: '48px 24px 40px',
-      }}>
-        {/* Back */}
-        <button
-          onClick={() => navigate('/checkin')}
-          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)',
-            cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center',
-            gap: 6, marginBottom: 40, fontFamily: 'var(--font-body)', padding: 0 }}
-        >
-          ← Back
-        </button>
+        <button onClick={() => navigate('/checkin')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 32, fontFamily: 'var(--font-b)', padding: 0 }}>← Back</button>
 
-        <div className="animate-fadeUp">
-          <p style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
-            letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
-            One-Time Setup
-          </p>
-          <h1 style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, marginBottom: 12 }}>
-            Register<br />This Device
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, marginBottom: 36 }}>
-            Set up biometric authentication for {worker?.full_name}.
+        <div className="fade-up">
+          <p style={{ fontFamily: 'var(--font-h)', fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8 }}>One-Time Setup</p>
+          <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 10, background: 'linear-gradient(135deg,#fff,#71717a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Register This Device</h1>
+          <p style={{ color: 'var(--text3)', fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>
+            Set up <strong style={{ color: 'var(--text2)' }}>{worker?.full_name}</strong> on this phone. You only need to do this once.
           </p>
         </div>
 
-        {/* Info cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 36 }}>
-          {STEPS.map((s, i) => (
-            <div key={i} className="card animate-fadeUp"
-              style={{ animationDelay: `${i * 0.1}s`, opacity: 0,
-                display: 'flex', alignItems: 'flex-start', gap: 16, padding: '18px 20px' }}>
-              <span style={{ fontSize: 24, flexShrink: 0 }}>{s.icon}</span>
-              <div>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700,
-                  fontSize: 15, marginBottom: 4 }}>{s.title}</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>{s.desc}</p>
-              </div>
+        {[
+          { icon: '🔐', title: 'Stays on your device', desc: 'Your biometrics never leave this phone — only a secure key is stored.' },
+          { icon: '👆', title: 'One-time only',        desc: 'Register once and check-ins just need a tap — no biometric every time.' },
+          { icon: '📱', title: 'Phone-locked',         desc: 'This registration ties your account to this specific phone.' },
+        ].map((s, i) => (
+          <div key={i} className="card fade-up" style={{ animationDelay: `${i * 0.08}s`, opacity: 0, display: 'flex', gap: 14, padding: '14px 16px', marginBottom: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: '10px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{s.icon}</div>
+            <div>
+              <p style={{ fontFamily: 'var(--font-h)', fontWeight: 700, fontSize: 13, color: 'var(--text1)', marginBottom: 2 }}>{s.title}</p>
+              <p style={{ color: 'var(--text3)', fontSize: 12, lineHeight: 1.5 }}>{s.desc}</p>
             </div>
-          ))}
-        </div>
-
-        {/* Device name */}
-        <div className="input-group" style={{ marginBottom: 20 }}>
-          <label className="input-label">Device Name (optional)</label>
-          <input
-            className="input-field"
-            type="text"
-            value={deviceName}
-            onChange={e => setDevice(e.target.value)}
-            placeholder="My Phone"
-          />
-        </div>
-
-        {error && (
-          <div style={{ padding: '14px 16px', background: '#FF5A5A15',
-            border: '1px solid #FF5A5A40', borderRadius: 'var(--radius-md)',
-            color: 'var(--danger)', fontSize: 14, marginBottom: 16 }}>
-            ⚠️ {error}
           </div>
+        ))}
+
+        <div className="input-group" style={{ marginTop: 20, marginBottom: 16 }}>
+          <label className="input-label">Device Name (optional)</label>
+          <input className="input-field" type="text" value={device} onChange={e => setDevice(e.target.value)} placeholder="My Phone" />
+        </div>
+
+        {(step === 'error' || error) && (
+          <div className="scale-in" style={{ padding: '12px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, color: '#EF4444', fontSize: 13, marginBottom: 14 }}>⚠️ {error}</div>
         )}
 
-        <button
-          className="btn btn-primary"
-          onClick={handleRegister}
-          disabled={step === 'registering'}
-        >
-          {step === 'registering' ? <span className="spinner" /> : '👆'}
-          {step === 'registering' ? 'Waiting for biometric...' : 'Register with Biometrics'}
+        <button className="btn btn-primary" onClick={handleRegister} disabled={step === 'loading'} style={{ marginTop: 'auto' }}>
+          {step === 'loading' ? <><span className="spinner"/>Waiting for biometric...</> : <><span style={{ fontSize: 18 }}>👆</span>Register with Biometrics</>}
         </button>
       </div>
     </div>
