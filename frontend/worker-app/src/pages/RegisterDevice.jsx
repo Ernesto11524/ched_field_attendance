@@ -19,10 +19,30 @@ export default function RegisterDevice() {
       await webauthnAPI.verifyRegistration(worker.id, response, device);
       setStep('success');
     } catch(err) {
-      setError(err.message || 'Registration failed. Please try again.');
-      setStep('error');
+      if (err.status === 409 || err.code === 'DEVICE_ALREADY_REGISTERED') {
+        setStep('blocked');
+      } else {
+        setError(err.message || 'Registration failed. Please try again.');
+        setStep('error');
+      }
     }
   }
+
+  if (step === 'blocked') return (
+    <div className="screen" style={{ background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+      <div style={{ padding: '0 28px' }}>
+        <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', border: '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 24px' }}>🔒</div>
+        <h2 style={{ fontFamily: 'var(--font-h)', fontSize: 22, fontWeight: 800, marginBottom: 10, color: '#EF4444' }}>Already Registered</h2>
+        <p style={{ color: 'var(--text2)', fontSize: 14, lineHeight: 1.6, marginBottom: 8 }}>
+          This account is already registered on another device.
+        </p>
+        <p style={{ color: 'var(--text3)', fontSize: 13, lineHeight: 1.6, marginBottom: 28 }}>
+          You must use your original registered phone to check in. If you lost your phone, ask your supervisor to reset your device registration.
+        </p>
+        <button className="btn btn-ghost" onClick={() => navigate('/checkin')}>← Back to Check-In</button>
+      </div>
+    </div>
+  );
 
   if (step === 'success') return (
     <div className="screen" style={{ background: 'var(--bg)', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>

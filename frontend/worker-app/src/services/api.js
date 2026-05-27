@@ -14,7 +14,10 @@ async function request(method, path, body = null, token = null) {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error || 'Something went wrong.');
+    const err = new Error(data.error || 'Something went wrong.');
+    err.status = res.status;
+    err.code   = data.code;
+    throw err;
   }
 
   return data;

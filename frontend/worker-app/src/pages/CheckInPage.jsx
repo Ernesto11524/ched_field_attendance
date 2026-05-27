@@ -98,9 +98,14 @@ export default function CheckInPage() {
       const authOptions = await webauthnAPI.getAuthenticationOptions(worker.id);
       webauthnResponse = await startAuthentication(authOptions);
     } catch(err) {
-      const msg = err.name === 'NotAllowedError'
-        ? 'Biometric scan was cancelled. Please try again.'
-        : (err.message || 'Could not verify biometrics. Please try again.');
+      let msg;
+      if (err.name === 'NotAllowedError') {
+        msg = isRegistered
+          ? 'Biometric failed. Make sure you are using your registered phone. If you recently changed phones, ask your supervisor to reset your device registration.'
+          : 'Biometric scan was cancelled. Please try again.';
+      } else {
+        msg = err.message || 'Could not verify biometrics. Please try again.';
+      }
       setError(msg);
       setPhase('error');
       return;
@@ -293,11 +298,13 @@ export default function CheckInPage() {
           )}
         </div>
 
-        <button onClick={() => navigate('/register-device')} style={{
-          background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer',
-          fontSize: 12, marginTop: 16, textAlign: 'center', fontFamily: 'var(--font-b)',
-          textDecoration: 'underline', padding: '8px',
-        }}>Register this device</button>
+        {!isRegistered && (
+          <button onClick={() => navigate('/register-device')} style={{
+            background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer',
+            fontSize: 12, marginTop: 16, textAlign: 'center', fontFamily: 'var(--font-b)',
+            textDecoration: 'underline', padding: '8px',
+          }}>Register this device</button>
+        )}
       </div>
     </div>
   );
