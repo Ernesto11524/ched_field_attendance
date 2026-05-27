@@ -26,13 +26,12 @@ function Clock() {
         <span style={{
           fontFamily: 'var(--font-h)', fontSize: 68, fontWeight: 800,
           letterSpacing: '-0.04em', lineHeight: 1,
-          background: 'linear-gradient(135deg, #fff 0%, #71717a 100%)',
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          color: '#FFFFFF',
           animation: 'clockTick 1s ease infinite',
         }}>{hh}</span>
         <span style={{ fontFamily: 'var(--font-h)', fontSize: 26, fontWeight: 700, color: 'var(--accent)', lineHeight: 1 }}>:{ss}</span>
       </div>
-      <p style={{ color: 'var(--text3)', fontSize: 13, marginTop: 4 }}>{date}</p>
+      <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>{date}</p>
     </div>
   );
 }

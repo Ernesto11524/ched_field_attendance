@@ -111,7 +111,7 @@ h1,h2,h3,h4{font-family:var(--font-h);letter-spacing:-0.02em;}
 
 /* Inputs */
 .input-group{display:flex;flex-direction:column;gap:7px;}
-.input-label{font-family:var(--font-h);font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);}
+.input-label{font-family:var(--font-h);font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text2);}
 .input-field {
   width:100%;padding:14px 18px;
   background:var(--bg2);border:1.5px solid var(--border);

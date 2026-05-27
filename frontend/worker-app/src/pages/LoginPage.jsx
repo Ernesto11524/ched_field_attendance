@@ -52,12 +52,8 @@ export default function LoginPage() {
               <circle cx="12" cy="10.5" r="2.5" fill="#000" stroke="none"/>
             </svg>
           </div>
-          <h1 style={{
-            fontSize: 28, fontWeight: 800, marginBottom: 6,
-            background: 'linear-gradient(135deg, #fff 0%, #71717a 100%)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>CHED Attendance</h1>
-          <p style={{ color: 'var(--text3)', fontSize: 14 }}>Field Worker Portal</p>
+          <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 6, color: '#FFFFFF' }}>CHED Attendance</h1>
+          <p style={{ color: 'var(--text2)', fontSize: 14 }}>Field Worker Portal</p>
         </div>
 
         {/* Form */}
@@ -103,14 +99,14 @@ export default function LoginPage() {
           padding: '12px 14px', background: 'rgba(245,166,35,0.06)',
           border: '1px solid rgba(245,166,35,0.15)', borderRadius: 10,
         }}>
-          <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6, textAlign: 'center' }}>
-            🔐 For security, your account can only be used on one registered device. Contact your supervisor if you need to switch phones.
+          <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, textAlign: 'center' }}>
+            For security, your account can only be used on one registered device. Contact your supervisor if you need to switch phones.
           </p>
         </div>
 
         <p className="fade-up" style={{
           animationDelay: '0.3s', opacity: 0,
-          textAlign: 'center', color: 'var(--text3)', fontSize: 12,
+          textAlign: 'center', color: 'var(--text2)', fontSize: 12,
           marginTop: 20, lineHeight: 1.7,
         }}>
           Don't know your ID? Contact your supervisor.<br/>
