@@ -251,6 +251,11 @@ export default function CheckInPage() {
               {result.distance_from_site_m != null && (
                 <p style={{ color: 'var(--text3)', fontSize: 11, marginTop: 8 }}>{result.distance_from_site_m}m from site</p>
               )}
+              {result.biometric_fail_reason && (
+                <p style={{ color: 'var(--text3)', fontSize: 10, marginTop: 6, wordBreak: 'break-all' }}>
+                  Debug: {result.biometric_fail_reason}
+                </p>
+              )}
             </div>
           );
         })()}
