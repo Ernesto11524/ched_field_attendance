@@ -44,9 +44,14 @@ export default function LoginPage() {
             width: 72, height: 72, borderRadius: '20px', margin: '0 auto 20px',
             background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 32, boxShadow: '0 8px 32px rgba(245,166,35,0.35)',
+            boxShadow: '0 8px 32px rgba(245,166,35,0.35)',
             animation: 'floatY 3s ease-in-out infinite',
-          }}>🌿</div>
+          }}>
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M12 21s-7-4.5-7-10.5a7 7 0 0114 0C19 16.5 12 21 12 21z"/>
+              <circle cx="12" cy="10.5" r="2.5" fill="#000" stroke="none"/>
+            </svg>
+          </div>
           <h1 style={{
             fontSize: 28, fontWeight: 800, marginBottom: 6,
             background: 'linear-gradient(135deg, #fff 0%, #71717a 100%)',
@@ -79,7 +84,10 @@ export default function LoginPage() {
               color: '#EF4444', fontSize: 13, marginBottom: 16,
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <span>⚠️</span>{error}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="3"/>
+              </svg>
+              {error}
             </div>
           )}
 
