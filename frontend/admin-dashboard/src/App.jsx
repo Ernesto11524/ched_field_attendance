@@ -1,12 +1,14 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Layout       from './components/Layout';
-import LoginPage    from './pages/LoginPage';
-import Dashboard    from './pages/Dashboard';
-import TodayPage    from './pages/TodayPage';
-import WorkersPage  from './pages/WorkersPage';
-import SitesPage    from './pages/SitesPage';
-import ReportsPage  from './pages/ReportsPage';
+import Layout           from './components/Layout';
+import LoginPage        from './pages/LoginPage';
+import Dashboard        from './pages/Dashboard';
+import TodayPage        from './pages/TodayPage';
+import WorkersPage      from './pages/WorkersPage';
+import WorkerDetailPage from './pages/WorkerDetailPage';
+import SitesPage        from './pages/SitesPage';
+import ReportsPage      from './pages/ReportsPage';
+import HistoryPage      from './pages/HistoryPage';
 
 function ProtectedRoute({ children }) {
   const { admin, loading } = useAuth();
@@ -26,13 +28,15 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/today"     element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
-        <Route path="/workers"   element={<ProtectedRoute><WorkersPage /></ProtectedRoute>} />
-        <Route path="/sites"     element={<ProtectedRoute><SitesPage /></ProtectedRoute>} />
-        <Route path="/reports"   element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-        <Route path="*"          element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login"            element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/dashboard"        element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/today"            element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
+        <Route path="/workers"          element={<ProtectedRoute><WorkersPage /></ProtectedRoute>} />
+        <Route path="/workers/:id"      element={<ProtectedRoute><WorkerDetailPage /></ProtectedRoute>} />
+        <Route path="/sites"            element={<ProtectedRoute><SitesPage /></ProtectedRoute>} />
+        <Route path="/history"          element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+        <Route path="/reports"          element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+        <Route path="*"                 element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   );

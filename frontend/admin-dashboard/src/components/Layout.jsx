@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV = [
   { path: '/dashboard', icon: '▦',  label: 'Dashboard'  },
   { path: '/today',     icon: '📋', label: 'Today'      },
+  { path: '/history',   icon: '🗂️', label: 'History'    },
   { path: '/workers',   icon: '👥', label: 'Workers'    },
   { path: '/sites',     icon: '📍', label: 'Work Sites' },
   { path: '/reports',   icon: '📊', label: 'Reports'    },
@@ -13,6 +14,12 @@ export default function Layout({ children }) {
   const { admin, logout } = useAuth();
   const { pathname }      = useLocation();
   const navigate          = useNavigate();
+
+  // Highlight workers nav for worker detail page too
+  const activeMatch = (path) => {
+    if (path === '/workers') return pathname.startsWith('/workers');
+    return pathname === path;
+  };
 
   const now = new Date().toLocaleDateString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -38,7 +45,7 @@ export default function Layout({ children }) {
         <nav style={{ flex: 1, padding: '10px 0' }}>
           {NAV.map(item => (
             <button key={item.path}
-              className={`nav-item ${pathname === item.path ? 'active' : ''}`}
+              className={`nav-item ${activeMatch(item.path) ? 'active' : ''}`}
               onClick={() => navigate(item.path)}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}

@@ -19,9 +19,18 @@ export default function LoginPage() {
       const res  = await fetch(`${API}/workers/by-employee-id/${employeeId.trim().toUpperCase()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Employee ID not found.');
+
+      // Save worker + token + device registration status
       login(data.worker, data.token);
-      navigate('/checkin');
-    } catch (err) { setError(err.message); }
+
+      // If they have a registered device, go to check-in
+      // If not, go to register device first
+      if (data.hasRegisteredDevice) {
+        navigate('/checkin');
+      } else {
+        navigate('/checkin'); // CheckInPage handles the redirect to register
+      }
+    } catch(err) { setError(err.message); }
     finally { setLoading(false); }
   }
 
@@ -40,7 +49,7 @@ export default function LoginPage() {
           }}>🌿</div>
           <h1 style={{
             fontSize: 28, fontWeight: 800, marginBottom: 6,
-            background: 'linear-gradient(135deg, #fff 0%, #a1a1aa 100%)',
+            background: 'linear-gradient(135deg, #fff 0%, #71717a 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>CHED Attendance</h1>
           <p style={{ color: 'var(--text3)', fontSize: 14 }}>Field Worker Portal</p>
@@ -80,10 +89,21 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* Security notice */}
+        <div className="fade-up" style={{
+          animationDelay: '0.2s', opacity: 0, marginTop: 24,
+          padding: '12px 14px', background: 'rgba(245,166,35,0.06)',
+          border: '1px solid rgba(245,166,35,0.15)', borderRadius: 10,
+        }}>
+          <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6, textAlign: 'center' }}>
+            🔐 For security, your account can only be used on one registered device. Contact your supervisor if you need to switch phones.
+          </p>
+        </div>
+
         <p className="fade-up" style={{
-          animationDelay: '0.2s', opacity: 0,
+          animationDelay: '0.3s', opacity: 0,
           textAlign: 'center', color: 'var(--text3)', fontSize: 12,
-          marginTop: 32, lineHeight: 1.7,
+          marginTop: 20, lineHeight: 1.7,
         }}>
           Don't know your ID? Contact your supervisor.<br/>
           <span style={{ color: 'var(--text3)' }}>CHED © {new Date().getFullYear()}</span>
