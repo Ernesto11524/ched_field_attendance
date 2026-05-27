@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { useAuth } from '../context/AuthContext';
-import { checkinAPI } from '../services/api';
+import { checkinAPI, webauthnAPI } from '../services/api';
 
 const API = 'https://cocobod-backend-production.up.railway.app/api';
 
@@ -77,6 +78,7 @@ export default function CheckInPage() {
     if (!site)         { setError('No site assigned. Contact your supervisor.'); setPhase('error'); return; }
     if (!isRegistered) { navigate('/register-device'); return; }
 
+    // Step 1: GPS
     setPhase('gps');
     let coords;
     try {
@@ -89,18 +91,36 @@ export default function CheckInPage() {
       );
     } catch(err) { setError(err.message); setPhase('error'); return; }
 
+    // Step 2: Biometric — get options from backend, trigger fingerprint prompt
+    setPhase('biometric');
+    let webauthnResponse;
+    try {
+      const authOptions = await webauthnAPI.getAuthenticationOptions(worker.id);
+      webauthnResponse = await startAuthentication(authOptions);
+    } catch(err) {
+      const msg = err.name === 'NotAllowedError'
+        ? 'Biometric scan was cancelled. Please try again.'
+        : (err.message || 'Could not verify biometrics. Please try again.');
+      setError(msg);
+      setPhase('error');
+      return;
+    }
+
+    // Step 3: Submit — backend verifies the WebAuthn response server-side
     setPhase('submitting');
     try {
       const data = await checkinAPI.submit({
-        worker_id: worker.id, site_id: site.id,
-        latitude: coords.latitude, longitude: coords.longitude,
-        biometric_verified: true, credential_id: null,
+        worker_id: worker.id,
+        site_id: site.id,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        webauthn_response: webauthnResponse,
       }, token);
       setResult(data.checkin); setPhase('result');
     } catch(err) { setError(err.message); setPhase('error'); }
   }
 
-  const busy = phase === 'gps' || phase === 'submitting';
+  const busy = phase === 'gps' || phase === 'biometric' || phase === 'submitting';
 
   return (
     <div className="screen" style={{ background: 'var(--bg)' }}>
@@ -185,19 +205,31 @@ export default function CheckInPage() {
           )}
         </div>
 
-        {/* Busy phase */}
-        {busy && (
+        {/* Busy phases */}
+        {phase === 'gps' && (
           <div className="card scale-in" style={{ marginBottom: 16, textAlign: 'center', padding: '24px 16px' }}>
-            <div style={{ fontSize: 40, marginBottom: 12, animation: 'floatY 2s ease-in-out infinite' }}>
-              {phase === 'gps' ? '📡' : '⏳'}
-            </div>
+            <div style={{ fontSize: 40, marginBottom: 12, animation: 'floatY 2s ease-in-out infinite' }}>📡</div>
             <div className="spinner" style={{ color: 'var(--accent)', margin: '0 auto 10px', width: 24, height: 24 }} />
-            <p style={{ fontFamily: 'var(--font-h)', fontWeight: 700, fontSize: 15, color: 'var(--text1)', marginBottom: 4 }}>
-              {phase === 'gps' ? 'Getting your location...' : 'Recording check-in...'}
-            </p>
-            <p style={{ color: 'var(--text3)', fontSize: 12 }}>
-              {phase === 'gps' ? 'Please allow GPS access' : 'Almost done, hold tight'}
-            </p>
+            <p style={{ fontFamily: 'var(--font-h)', fontWeight: 700, fontSize: 15, color: 'var(--text1)', marginBottom: 4 }}>Getting your location...</p>
+            <p style={{ color: 'var(--text3)', fontSize: 12 }}>Please allow GPS access</p>
+          </div>
+        )}
+
+        {phase === 'biometric' && (
+          <div className="card scale-in" style={{ marginBottom: 16, textAlign: 'center', padding: '24px 16px', background: 'rgba(245,166,35,0.04)', borderColor: 'rgba(245,166,35,0.2)' }}>
+            <div style={{ fontSize: 40, marginBottom: 12, animation: 'floatY 2s ease-in-out infinite' }}>👆</div>
+            <div className="spinner" style={{ color: 'var(--accent)', margin: '0 auto 10px', width: 24, height: 24 }} />
+            <p style={{ fontFamily: 'var(--font-h)', fontWeight: 700, fontSize: 15, color: 'var(--text1)', marginBottom: 4 }}>Verify your identity</p>
+            <p style={{ color: 'var(--text3)', fontSize: 12 }}>Use your fingerprint or face ID when prompted</p>
+          </div>
+        )}
+
+        {phase === 'submitting' && (
+          <div className="card scale-in" style={{ marginBottom: 16, textAlign: 'center', padding: '24px 16px' }}>
+            <div style={{ fontSize: 40, marginBottom: 12, animation: 'floatY 2s ease-in-out infinite' }}>⏳</div>
+            <div className="spinner" style={{ color: 'var(--accent)', margin: '0 auto 10px', width: 24, height: 24 }} />
+            <p style={{ fontFamily: 'var(--font-h)', fontWeight: 700, fontSize: 15, color: 'var(--text1)', marginBottom: 4 }}>Recording check-in...</p>
+            <p style={{ color: 'var(--text3)', fontSize: 12 }}>Almost done, hold tight</p>
           </div>
         )}
 
