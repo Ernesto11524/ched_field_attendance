@@ -13,7 +13,15 @@ const errorHandler     = require('./src/middleware/error.middleware');
 const app = express();
 
 // ── Middleware ────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://ched-field-attendance.vercel.app',
+    'https://ched-field-attendance-1yo8.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5174',
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // ── Health check ──────────────────────────────────────────
@@ -34,6 +42,6 @@ app.use(errorHandler);
 
 // ── Start server ──────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });

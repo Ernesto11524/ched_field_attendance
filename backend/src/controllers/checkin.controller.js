@@ -1,5 +1,11 @@
 const db = require('../config/db');
 const { haversineDistance } = require('../utils/haversine');
+const { verifyAuthenticationResponse } = require('@simplewebauthn/server');
+
+const RP_ID  = process.env.RP_ID   || 'localhost';
+const ORIGINS = process.env.ORIGINS
+  ? process.env.ORIGINS.split(',').map(s => s.trim())
+  : [process.env.ORIGIN || 'http://localhost:5173'];
 
 /**
  * POST /api/checkins
@@ -10,9 +16,11 @@ const { haversineDistance } = require('../utils/haversine');
  *   site_id,
  *   latitude,
  *   longitude,
- *   biometric_verified,   -- true/false (result from WebAuthn on the device)
- *   credential_id         -- the worker's registered credential UUID
+ *   webauthn_response   -- the raw WebAuthn assertion from startAuthentication()
  * }
+ *
+ * biometric_verified is determined server-side from the WebAuthn response.
+ * Clients cannot fake it.
  */
 async function submitCheckin(req, res, next) {
   try {
@@ -21,8 +29,7 @@ async function submitCheckin(req, res, next) {
       site_id,
       latitude,
       longitude,
-      biometric_verified,
-      credential_id,
+      webauthn_response,
     } = req.body;
 
     // ── 1. Validate required fields ───────────────────────
@@ -84,7 +91,75 @@ async function submitCheckin(req, res, next) {
 
     const window = windowResult.rows[0] || null;
 
-    // ── 6. Determine check-in status ─────────────────────
+    // ── 6. Verify biometrics server-side ─────────────────
+    // biometric_verified is never trusted from the client — it is computed
+    // here by re-running the WebAuthn cryptographic check on the backend.
+    let biometric_verified = false;
+    let used_credential_id = null;
+    let biometric_fail_reason = 'no_webauthn_response';
+
+    if (webauthn_response) {
+      try {
+        const challengeResult = await db.query(
+          `SELECT challenge FROM webauthn_challenges
+           WHERE worker_id = $1 AND type = 'authentication' AND expires_at > NOW()`,
+          [worker_id]
+        );
+
+        if (challengeResult.rows.length === 0) {
+          biometric_fail_reason = 'challenge_not_found_or_expired';
+        } else {
+          const storedChallenge = challengeResult.rows[0].challenge;
+
+          const credResult = await db.query(
+            `SELECT * FROM worker_credentials
+             WHERE worker_id = $1 AND credential_id = $2 AND is_active = true`,
+            [worker_id, webauthn_response.id]
+          );
+
+          if (credResult.rows.length === 0) {
+            biometric_fail_reason = `credential_not_found (response id: ${webauthn_response.id})`;
+          } else {
+            const cred = credResult.rows[0];
+
+            const verification = await verifyAuthenticationResponse({
+              response: webauthn_response,
+              expectedChallenge: storedChallenge,
+              expectedOrigin: ORIGINS,
+              expectedRPID: RP_ID,
+              authenticator: {
+                credentialID: Buffer.from(cred.credential_id, 'base64url'),
+                credentialPublicKey: Buffer.from(cred.public_key, 'base64url'),
+                counter: cred.sign_count,
+              },
+            });
+
+            if (verification.verified) {
+              biometric_verified = true;
+              used_credential_id = cred.id;
+              biometric_fail_reason = null;
+              await db.query(
+                'UPDATE worker_credentials SET sign_count = $1 WHERE id = $2',
+                [verification.authenticationInfo.newCounter, cred.id]
+              );
+            } else {
+              biometric_fail_reason = 'verification_returned_false';
+            }
+          }
+        }
+
+        // Always clean up the challenge after an attempt (success or failure)
+        await db.query(
+          `DELETE FROM webauthn_challenges WHERE worker_id = $1 AND type = 'authentication'`,
+          [worker_id]
+        );
+      } catch (bioErr) {
+        biometric_fail_reason = `exception: ${bioErr.message}`;
+        console.error('Biometric verification error during check-in:', bioErr.message);
+      }
+    }
+
+    // ── 7. Determine check-in status ─────────────────────
     let status;
 
     if (!location_verified) {
@@ -92,12 +167,12 @@ async function submitCheckin(req, res, next) {
     } else if (!biometric_verified) {
       status = 'biometric_failed';
     } else if (!window) {
-      status = 'late'; // checked in but outside any window
+      status = 'late'; // checked in but outside any time window
     } else {
       status = 'on_time';
     }
 
-    // ── 7. Save the check-in record ───────────────────────
+    // ── 8. Save the check-in record ───────────────────────
     const result = await db.query(
       `INSERT INTO checkins (
          worker_id, site_id, window_id, credential_id,
@@ -111,19 +186,19 @@ async function submitCheckin(req, res, next) {
         worker_id,
         site_id,
         window ? window.id : null,
-        credential_id || null,
+        used_credential_id,
         latitude,
         longitude,
         Math.round(distance),
         location_verified,
-        biometric_verified || false,
+        biometric_verified,
         status,
       ]
     );
 
     const checkin = result.rows[0];
 
-    // ── 8. Return the result ──────────────────────────────
+    // ── 9. Return the result ──────────────────────────────
     res.status(201).json({
       message: getStatusMessage(status),
       checkin: {
@@ -134,6 +209,8 @@ async function submitCheckin(req, res, next) {
         distance_from_site_m: checkin.distance_from_site_m,
         window: window ? window.label : null,
         checked_in_at: checkin.checked_in_at,
+        // Included to help diagnose failures; safe to remove once stable
+        biometric_fail_reason: biometric_fail_reason || undefined,
       },
     });
   } catch (err) {

@@ -7,7 +7,7 @@
  * It will ask you for a name, email, and password.
  */
 
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const readline = require('readline');

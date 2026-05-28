@@ -9,7 +9,13 @@ const db = require('../config/db');
 
 const RP_ID   = process.env.RP_ID   || 'localhost';
 const RP_NAME = 'COCOBOD Field Attendance';
-const ORIGIN  = process.env.ORIGIN  || 'http://localhost:5173';
+
+// Support comma-separated list so one Railway deployment serves both
+// Vercel URLs and local dev at the same time.
+// e.g. ORIGINS=https://ched-field-attendance.vercel.app,https://ched-field-attendance-1yo8.vercel.app,http://localhost:5173
+const ORIGINS = process.env.ORIGINS
+  ? process.env.ORIGINS.split(',').map(s => s.trim())
+  : [process.env.ORIGIN || 'http://localhost:5173'];
 
 // ── REGISTRATION ─────────────────────────────────────────
 
@@ -33,9 +39,12 @@ async function getRegistrationOptions(req, res, next) {
       [workerId]
     );
 
-    const existingCredentials = credResult.rows.map(row => ({
-      id: row.credential_id, type: 'public-key',
-    }));
+    if (credResult.rows.length > 0) {
+      return res.status(409).json({
+        error: 'This account is already registered on a device. Contact your supervisor to reset your registration if you have lost your phone.',
+        code: 'DEVICE_ALREADY_REGISTERED',
+      });
+    }
 
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
@@ -43,7 +52,7 @@ async function getRegistrationOptions(req, res, next) {
       userID: Buffer.from(worker.id),
       userName: worker.employee_id,
       userDisplayName: worker.full_name,
-      excludeCredentials: existingCredentials,
+      excludeCredentials: [],
       authenticatorSelection: {
         userVerification: 'required',
         residentKey: 'preferred',
@@ -86,7 +95,7 @@ async function verifyRegistration(req, res, next) {
     const verification = await verifyRegistrationResponse({
       response: registrationResponse,
       expectedChallenge: storedChallenge,
-      expectedOrigin: ORIGIN,
+      expectedOrigin: ORIGINS,
       expectedRPID: RP_ID,
     });
 
@@ -96,6 +105,12 @@ async function verifyRegistration(req, res, next) {
 
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
+    // In simplewebauthn v9, credentialID is already a Base64URLString.
+    // Guard against both string and Uint8Array so this works across versions.
+    const credIdBase64 = typeof credentialID === 'string'
+      ? credentialID
+      : Buffer.from(credentialID).toString('base64url');
+
     await db.query(
       `INSERT INTO worker_credentials
          (worker_id, credential_id, public_key, sign_count, device_name)
@@ -104,7 +119,7 @@ async function verifyRegistration(req, res, next) {
          SET sign_count = EXCLUDED.sign_count`,
       [
         workerId,
-        Buffer.from(credentialID).toString('base64url'),
+        credIdBase64,
         Buffer.from(credentialPublicKey).toString('base64url'),
         counter,
         deviceName || 'My Phone',
@@ -140,8 +155,11 @@ async function getAuthenticationOptions(req, res, next) {
       });
     }
 
+    // Pass as Buffer (Uint8Array) so generateAuthenticationOptions encodes
+    // the bytes correctly. Passing a raw string risks double-encoding.
     const allowCredentials = credResult.rows.map(row => ({
-      id: row.credential_id, type: 'public-key',
+      id: Buffer.from(row.credential_id, 'base64url'),
+      type: 'public-key',
     }));
 
     const options = await generateAuthenticationOptions({
@@ -198,7 +216,7 @@ async function verifyAuthentication(req, res, next) {
     const verification = await verifyAuthenticationResponse({
       response: authResponse,
       expectedChallenge: storedChallenge,
-      expectedOrigin: ORIGIN,
+      expectedOrigin: ORIGINS,
       expectedRPID: RP_ID,
       authenticator: {
         credentialID: Buffer.from(cred.credential_id, 'base64url'),
